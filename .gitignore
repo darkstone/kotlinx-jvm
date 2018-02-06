@@ -162,3 +162,5 @@ gradle-app.setting
 
 
 # End of https://www.gitignore.io/api/java,linux,gradle,kotlin,windows,intellij+iml,visualstudiocode
+
+.idea
