@@ -16,6 +16,10 @@ repositories {
 
 dependencies {
     compile "org.jetbrains.kotlin:kotlin-stdlib-jdk8:$kotlin_version"
+    compile "org.jetbrains.kotlin:kotlin-reflect:$kotlin_version"
+    testCompile 'junit:junit:4.12'
+    testCompile "org.jetbrains.kotlin:kotlin-test-junit:1.2.10"
+    testCompile (group: 'com.nhaarman', name: 'mockito-kotlin', version: '1.5.0')
 }
 
 compileKotlin {
