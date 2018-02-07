@@ -17,7 +17,7 @@ package ds.kotlinx.util
  * doSomething("1","2",(URL)null)
  * ```
  *
- * Calling from kotlin:
+ * Resolving from kotlin:
  * - Without extension: `doSomething("1","2",null as URL?)`
  * - With extension: `doSomething("1","2",<URL>nullOf())`
  */
