@@ -22,3 +22,5 @@ package ds.kotlinx.util
  * - With extension: `doSomething("1","2",<URL>nullOf())`
  */
 inline fun <reified T> nullOf():T? = null
+
+fun <T> Boolean.toTruthOf(truth:T, notTrue:T): T = if (this) truth else notTrue
