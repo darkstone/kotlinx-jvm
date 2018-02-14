@@ -1,15 +1,11 @@
 package ds.kotlinx.xml.dom
 
-import ds.kotlinx.util.toTruthOf
-import org.intellij.lang.annotations.Language
+import ds.kotlinx.util.*
 import org.w3c.dom.Document
-import org.xml.sax.InputSource
 import java.io.*
 import javax.xml.parsers.DocumentBuilder
 import javax.xml.parsers.DocumentBuilderFactory
-import javax.xml.transform.OutputKeys
-import javax.xml.transform.Transformer
-import javax.xml.transform.TransformerFactory
+import javax.xml.transform.*
 import javax.xml.transform.dom.DOMSource
 import javax.xml.transform.stream.StreamResult
 import javax.xml.transform.stream.StreamSource
@@ -19,19 +15,10 @@ import org.w3c.dom.Node as DomNode
 sealed class DOMToXmlStringStyle {
 
     object Compact : DOMToXmlStringStyle() {
-        @Language("XML")
-        private val xsl = """|<xsl:stylesheet xmlns:xsl='http://www.w3.org/1999/XSL/Transform' version="1.0">
-                             |  <xsl:output method='xml' omit-xml-declaration='yes' indent='no'/>
-                             |  <xsl:strip-space elements="*"/>
-                             |  <xsl:template match='@*|node()'>
-                             |      <xsl:copy>
-                             |          <xsl:apply-templates select='@*|node()'/>
-                             |      </xsl:copy>
-                             |  </xsl:template>
-                             |</xsl:stylesheet>
-                             |""".trimMargin()
 
-        override fun transformer(): Transformer = TransformerFactory.newInstance().newTransformer(StreamSource(StringReader(xsl)))
+        private val trimWhitespace: InputStreamProvider by classpathResourceAt<DOMToXmlStringStyle>("TrimWhitespace.xsl")
+
+        override fun transformer(): Transformer = TransformerFactory.newInstance().newTransformer(StreamSource(trimWhitespace()))
     }
 
     open class Pretty(val indent: Int, val omitXmlDeclaration: Boolean) : DOMToXmlStringStyle() {
@@ -47,7 +34,6 @@ sealed class DOMToXmlStringStyle {
 
     object HumanFriendly : Pretty(indent = DEFAULT_INDENT_WIDTH, omitXmlDeclaration = true)
 
-
     internal abstract fun transformer(): Transformer
 
     companion object {
@@ -56,16 +42,14 @@ sealed class DOMToXmlStringStyle {
         private const val INDENT_WITH_ATTRIBUTE = "indent-number"
         private const val DEFAULT_INDENT_WIDTH = 3
     }
-
-
 }
 
 fun <T : DomNode> OutputStream.write(node: T, styleDOMTo: DOMToXmlStringStyle) {
     styleDOMTo.transformer().transform(DOMSource(node), StreamResult(this))
 }
 
-fun <T : DomNode> Writer.write(node: T, styleDOMTo: DOMToXmlStringStyle) {
-    styleDOMTo.transformer().transform(DOMSource(node), StreamResult(this))
+fun <T : DomNode> Writer.write(node: T, xmlToStringStyle: DOMToXmlStringStyle) {
+    xmlToStringStyle.transformer().transform(DOMSource(node), StreamResult(this))
 }
 
 fun <T : DomNode> T.toXml(styleDOMTo: DOMToXmlStringStyle): String = StringWriter()
@@ -78,72 +62,44 @@ interface FriendlyToXmlString {
 
 open class DocumentWithFriendlyToString(private val doc: Document) : Document by doc, FriendlyToXmlString {
 
-    override fun toXmlString(styleDOMTo: DOMToXmlStringStyle): String = with(StringWriter()) {
-        write(doc, styleDOMTo)
-        toString()
-    }
+    override fun toXmlString(styleDOMTo: DOMToXmlStringStyle): String = doc.toXml(styleDOMTo)
 
     override fun toString(): String = toXmlString(DOMToXmlStringStyle.HumanFriendly)
 }
 
-interface DomConfiguration {
-
-    fun configureFactory(configure: DocumentBuilderFactory.() -> Unit)
-
-    fun configureBuilder(configure: DocumentBuilder.() -> Unit)
-
-}
-
-typealias DocumentBuilderConfigurationBlock = (DomConfiguration.() -> Unit)
-
-fun newDocumentBuilder(configure: DocumentBuilderConfigurationBlock? = null): DocumentBuilder {
-
-    var configureFactory: (DocumentBuilderFactory.() -> Unit)? = null
-    var configureBuilder: (DocumentBuilder.() -> Unit)? = null
-
-    object : DomConfiguration {
-
-        override fun configureFactory(configure: DocumentBuilderFactory.() -> Unit) {
-            configureFactory = configure
-        }
-
-        override fun configureBuilder(configure: DocumentBuilder.() -> Unit) {
-            configureBuilder = configure
-        }
-
-
-        init {
-            if (configure != null) {
-                configure()
-            }
-        }
+fun Document.toHumanFriendly(): DocumentWithFriendlyToString {
+    return when (this) {
+        is DocumentWithFriendlyToString -> this
+        else -> let(::DocumentWithFriendlyToString)
     }
-
-    return DocumentBuilderFactory
-            .newInstance().apply { configureFactory?.let { it() } }
-            .newDocumentBuilder().apply { configureBuilder?.let { it() } }
 }
 
-fun Document.toDocumentWithFriendlyToString(): DocumentWithFriendlyToString = this as? DocumentWithFriendlyToString
-        ?: DocumentWithFriendlyToString(this)
 
-fun InputSource.readDocument(configuration: DocumentBuilderConfigurationBlock? = null): DocumentWithFriendlyToString {
-    return newDocumentBuilder(configuration).parse(this).toDocumentWithFriendlyToString()
+typealias DocumentBuilderConfigurationBlock = DocumentBuilder.() -> Unit
+typealias DocumentBuilderFactoryConfigurationBlock = DocumentBuilderFactory.() -> Unit
+
+private val defaultBuilderFactory by lazy {
+    DocumentBuilderFactory.newInstance().apply {
+        isValidating = false
+        isNamespaceAware = true
+    }
 }
 
-fun InputStream.readDocument(configuration: DocumentBuilderConfigurationBlock? = null): DocumentWithFriendlyToString {
-    return InputSource(this).readDocument(configuration)
+private val defaultDocumentBuilder by lazy { defaultBuilderFactory.newDocumentBuilder() }
+
+fun documentBuilderFactory(config: DocumentBuilderFactoryConfigurationBlock? = null): DocumentBuilderFactory {
+    return when (config) {
+        null -> defaultBuilderFactory
+        else -> DocumentBuilderFactory.newInstance().apply { config() }
+    }
 }
 
-fun File.readDocument(configuration: DocumentBuilderConfigurationBlock? = null): DocumentWithFriendlyToString {
-    return inputStream().use { InputSource(it).readDocument(configuration) }
+fun documentBuilder(factory: DocumentBuilderFactory? = null, config: DocumentBuilderConfigurationBlock? = null): DocumentBuilder {
+    return when {
+        factory == null && config == null -> defaultDocumentBuilder
+        factory == null -> defaultBuilderFactory.newDocumentBuilder().apply { if (config != null) config() }
+        else -> factory.newDocumentBuilder().apply { if (config != null) config() }
+    }
 }
 
-fun Reader.readDocument(configuration: DocumentBuilderConfigurationBlock? = null): DocumentWithFriendlyToString {
-    return InputSource(this).readDocument(configuration)
-}
-
-fun String.toDocument(configuration: DocumentBuilderConfigurationBlock? = null): DocumentWithFriendlyToString {
-    return InputSource(StringReader(this)).readDocument(configuration)
-}
 

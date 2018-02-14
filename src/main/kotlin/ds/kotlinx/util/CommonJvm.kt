@@ -21,6 +21,17 @@ package ds.kotlinx.util
  * - Without extension: `doSomething("1","2",null as URL?)`
  * - With extension: `doSomething("1","2",<URL>nullOf())`
  */
-inline fun <reified T> nullOf():T? = null
+inline fun <reified T> nullOf(): T? = null
 
-fun <T> Boolean.toTruthOf(truth:T, notTrue:T): T = if (this) truth else notTrue
+/**
+ * Function to translate boolean to either one of the values. Used to when a function,
+ * or an API, expect a string "yes", or "no", but you still want to keep a simple boolean value
+ * around.
+ *
+ * # Samples
+ *
+ * ```kotlin
+ * factory.setParameter("omit-xml-declaration", omit.toTruthOf("yes","no"))
+ *
+ */
+fun <T> Boolean.toTruthOf(truth: T, notTrue: T): T = if (this) truth else notTrue
